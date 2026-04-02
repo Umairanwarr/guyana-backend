@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id Int @id @default(autoincrement())
+  email String @unique
+  name String?
+  phone String?
+  photoUrl String?
+  password String
+  otp String?
+  otpExpiry DateTime?
+  isVerified Boolean @default(false)
+  isAdmin Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  /// Timestamp of the last socket activity (used for "online" status)
+  lastSeen   DateTime?
+  listings Listing[]
+  favorites Favorite[]
+  savedSearches SavedSearch[]
+  sentMessages Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  sellerConversations Conversation[] @relation("SellerConversations")
+  buyerConversations Conversation[] @relation("BuyerConversations")
+  reportedListings ListingReport[] @relation("UserReports")
+}
+
+model Listing {
+  id Int @id @default(autoincrement())
+  title String
+  description String
+  price Float
+  negotiable Boolean @default(false)
+  categoryId String
+  condition String // "new", "like-new", "used"
+  location String
+  contactPhone String
+  contactMethod String // "chat", "call"
+  images String // JSON array of image paths
+  status String @default("active") // "active", "sold", "inactive"
+
+  // Map coordinates
+  latitude Float?
+  longitude Float?
+
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Vehicle specific fields
+  brand String? // Vehicle brand (Toyota, Nissan, etc.)
+  model String? // Vehicle model (Hilux, Juke, etc.)
+  year Int? // Manufacturing year
+  mileage Int? // Mileage in km
+  transmission String? // "automatic", "manual", "cvt"
+  fuelType String? // "petrol", "diesel", "hybrid", "electric"
+
+  // Real Estate specific fields
+  propertyType String? // "house", "apartment", "land", "commercial", "office"
+  bedrooms Int? // Number of bedrooms
+  bathrooms Int? // Number of bathrooms
+  area Float? // Area in sqft
+  furnished Boolean? // Whether property is furnished
+  parking String? // Dropdown
+  gated Boolean? // Dropdown
+  tiled Boolean? // Dropdown
+  ac String? // Air Conditioning (Dropdown)
+  ensuite Boolean? // Master Bedroom Ensuite
+  water String? // Hot/Cold (JSON string)
+  amenities String? // Amenities JSON string: Pool, Elevator, Patio
+  cupboards String? // Built-in Cupboards (Dropdown)
+  village String? // Village (Input)
+
+  // Jobs specific fields
+  jobType String? // "full-time", "part-time", "contract", "internship", "remote"
+  experienceLevel String? // "entry", "mid", "senior", "executive"
+  salaryPeriod String? // "monthly", "annually", "hourly"
+  companyName String? // Company or employer name
+  industry String? // Industry sector
+  currency String? // Currency code (e.g. TT$, USD)
+  educationLevel String? // Education requirement
+
+  favorites Favorite[]
+  conversations Conversation[]
+  reports ListingReport[] @relation("ListingReports")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([userId])
+  @@index([status])
+  @@index([brand])
+  @@index([propertyType])
+}
+
+model Favorite {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId Int
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId])
+}
+
+model Conversation {
+  id Int @id @default(autoincrement())
+  conversationId String @unique
+  listingId Int?
+  sellerId Int
+  buyerId Int
+  listingTitle String?
+  listingPrice Float?
+  listingImages String?
+  lastMessage String?
+  lastMessageTime DateTime @default(now())
+  unreadCountSeller Int @default(0)
+  unreadCountBuyer Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seller User @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer User @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([sellerId])
+  @@index([buyerId])
+  @@index([conversationId])
+  @@index([lastMessageTime])
+}
+
+model Message {
+  imagePath String?   // relative path like "images/chats/<uuid>.png"
+  id Int @id @default(autoincrement())
+  conversationId Int
+  senderId Int
+  receiverId Int
+  text String
+  isRead Boolean @default(false)
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model SavedSearch {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query String // The search term or JSON filter
+  name String? // Optional name for the search
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ListingReport {
+  id Int @id @default(autoincrement())
+  listingId Int
+  reporterId Int
+  reason String // "spam", "fraud", "inappropriate", "other"
+  description String?
+  status String @default("pending") // "pending", "resolved", "dismissed"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade, name: "ListingReports")
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade, name: "UserReports")
+  notifications AdminNotification[]
+
+  @@index([listingId])
+  @@index([reporterId])
+  @@index([status])
+}
+
+model AdminNotification {
+  id Int @id @default(autoincrement())
+  reportId Int
+  report ListingReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  type String @default("report") // "report", "system", etc.
+  title String
+  message String
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([reportId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model UserNotification {
+  id Int @id @default(autoincrement())
+  userId Int
+  eventType String // "report_submitted", "report_resolved", "report_dismissed"
+  title String
+  message String
+  reportId Int?
+  listingId Int?
+  listingTitle String?
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
