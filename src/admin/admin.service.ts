@@ -152,6 +152,42 @@ export class AdminService {
     return listing;
   }
 
+  async getListings(page: number = 1, limit: number = 20, search?: string) {
+    const skip = (page - 1) * limit;
+    const where = search
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' as const } },
+            { description: { contains: search, mode: 'insensitive' as const } },
+            { location: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    const [listings, total] = await Promise.all([
+      this.prisma.listing.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, name: true, email: true, photoUrl: true } },
+        },
+      }),
+      this.prisma.listing.count({ where }),
+    ]);
+
+    const parsed = listings.map((l: any) => ({ ...l, images: JSON.parse(l.images || '[]') }));
+
+    return {
+      data: parsed,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async dismissReport(reportId: number) {
     const report = await this.prisma.listingReport.findUnique({
       where: { id: reportId },
@@ -209,6 +245,34 @@ export class AdminService {
     });
 
     return updated;
+  }
+
+  async deleteListing(listingId: number) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+    });
+
+    if (!listing) {
+      throw new Error('Listing not found');
+    }
+
+    const title = listing.title;
+    const ownerId = listing.userId;
+
+    await this.prisma.listing.delete({ where: { id: listingId } });
+
+    await this.prisma.userNotification.create({
+      data: {
+        userId: ownerId,
+        eventType: 'listing_removed_by_admin',
+        title: 'Listing Removed by Admin',
+        message: `Your listing "${title}" has been removed by an administrator.`,
+        listingId: listingId,
+        listingTitle: title,
+      },
+    });
+
+    return { success: true };
   }
 
   async getUsers(page: number = 1, limit: number = 20, search?: string) {

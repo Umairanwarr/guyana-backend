@@ -37,9 +37,23 @@ export class AdminController {
     return this.adminService.getListingReports();
   }
 
+  @Get('listings')
+  async getListings(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getListings(parseInt(page), parseInt(limit), search);
+  }
+
   @Get('listings/:id')
   async getListingDetails(@Param('id') id: string) {
     return this.adminService.getListingDetails(parseInt(id));
+  }
+
+  @Delete('listings/:id')
+  async deleteListing(@Param('id') id: string) {
+    return this.adminService.deleteListing(parseInt(id));
   }
 
   @Post('reports/:id/dismiss')
